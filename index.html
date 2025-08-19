@@ -75,6 +75,14 @@
                 localStorage.setItem('cryptoDashboardSettings', JSON.stringify(settings));
             } catch (e) { console.warn("Einstellungen konnten nicht gespeichert werden."); }
         }
+        
+        function updateConnectionStatus(status, message) {
+            const statusEl = document.getElementById('connectionStatus');
+            if(statusEl) {
+                statusEl.className = 'connection-status ' + status;
+                statusEl.textContent = message;
+            }
+        }
 
         // --- DATENLADUNG & VERARBEITUNG ---
         document.addEventListener('DOMContentLoaded', () => {
@@ -91,18 +99,15 @@
             const settings = loadUserSettings();
 
             if (sheetId) {
-                // Wenn eine ID im Link ist, speichere sie und verwende sie
                 settings.sheetId = sheetId;
                 saveUserSettings(settings);
-                // Entferne den Parameter aus der URL für eine saubere Ansicht
                 window.history.replaceState({}, document.title, window.location.pathname);
             } else {
-                // Ansonsten, verwende die gespeicherte ID
                 sheetId = settings.sheetId;
             }
             
             if (!sheetId) {
-                const msg = "Fehler: Google Sheet ID nicht gefunden. Bitte rufen Sie das Dashboard einmal mit dem 'Magic Link' auf (z.B. .../dashboard.html?sheet=IHRE_ID).";
+                const msg = "Fehler: Google Sheet ID nicht gefunden. Bitte rufen Sie das Dashboard einmal mit dem 'Magic Link' auf (z.B. .../index.html?sheet=IHRE_ID).";
                 console.error(msg);
                 updateConnectionStatus('error', '❌ ID fehlt');
                 alert(msg);
@@ -232,7 +237,10 @@
         }
 
         function updateDashboard() {
-            if (!dashboardData || !dashboardData.coins[currentCoin]) return;
+            if (!dashboardData || !dashboardData.coins[currentCoin]) {
+                console.error("Keine Daten zum Anzeigen für Coin:", currentCoin);
+                return;
+            };
             
             document.getElementById('portfolioTotal').textContent = '€' + dashboardData.portfolio_total.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             document.getElementById('lastUpdate').textContent = new Date(dashboardData.last_update).toLocaleTimeString('de-DE');
@@ -268,8 +276,10 @@
         function updateMainChart() {
             const ctx = document.getElementById('mainChart').getContext('2d');
             if (charts.main) charts.main.destroy();
+            
             const coin = dashboardData.coins[currentCoin];
             const sliceIndex = Math.max(0, coin.data.length - currentTimeRange);
+            
             charts.main = new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -287,7 +297,9 @@
         function updatePortfolioChart() {
             const ctx = document.getElementById('portfolioChart').getContext('2d');
             if (charts.portfolio) charts.portfolio.destroy();
+
             const sliceIndex = Math.max(0, dashboardData.portfolio_history.length - currentTimeRange);
+
             charts.portfolio = new Chart(ctx, {
                 type: 'line',
                 data: {
