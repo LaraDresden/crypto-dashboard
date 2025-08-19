@@ -2,8 +2,8 @@
 <!--
     🚀 Crypto Dashboard - Responsive & Mobile-optimized
     
-    Version: v1.3.0
-    Created: August 19, 2025 - 20:40:00 CET
+    Version: v1.3.1
+    Created: August 19, 2025 - 20:50:00 CET
     Author: Claude (Anthropic)
     
     Features:
@@ -16,6 +16,11 @@
     - Real portfolio data integration
     - Robust number parsing
     - Browser settings persistence (localStorage)
+    
+    Changelog v1.3.1:
+    - BUGFIX: Intelligent number parsing (714.10 vs 1.234.567)
+    - Fixed portfolio value calculation errors
+    - Improved decimal vs thousand separator detection
     
     Changelog v1.3.0:
     - Added real portfolio data integration (Wert_EUR column)
@@ -30,7 +35,7 @@
     - Improved data sorting by timestamp
     - Enhanced error handling for CSV parsing
     
-    Last Updated: August 19, 2025 - 20:40:00 CET
+    Last Updated: August 19, 2025 - 20:50:00 CET
 -->
 <html lang="de">
 <head>
@@ -502,7 +507,7 @@
 </head>
 <body>
     <div class="connection-status" id="connectionStatus">🔄 Verbinde...</div>
-    <div class="version-info">v1.3.0 | 19.08.2025</div>
+    <div class="version-info">v1.3.1 | 19.08.2025</div>
     
     <div class="dashboard">
         <!-- Header -->
@@ -659,8 +664,8 @@
     <script>
         // Dashboard Version Information
         const DASHBOARD_VERSION = {
-            version: 'v1.3.0',
-            build: '19.08.2025-20:40',
+            version: 'v1.3.1',
+            build: '19.08.2025-20:50',
             author: 'Claude (Anthropic)',
             features: [
                 'Responsive Mobile & Desktop Design',
@@ -674,11 +679,51 @@
             ]
         };
 
-        // Robuste deutsche Zahlen-Konvertierung
+        // Intelligente deutsche Zahlen-Konvertierung
         function parseGermanNumber(germanString) {
             if (!germanString || typeof germanString !== 'string') return 0;
-            // Entfernt Tausendertrennzeichen (Punkte) und ersetzt das Dezimalkomma durch einen Punkt
-            return parseFloat(germanString.replace(/\./g, '').replace(',', '.')) || 0;
+            
+            // Entferne Leerzeichen
+            const cleaned = germanString.trim();
+            
+            // Prüfe das Format der Zahl
+            const lastDotIndex = cleaned.lastIndexOf('.');
+            const lastCommaIndex = cleaned.lastIndexOf(',');
+            
+            // Fall 1: Enthält Komma → Komma ist Dezimaltrennzeichen
+            if (lastCommaIndex > -1) {
+                // Format: 1.234.567,89 oder 1234,89
+                return parseFloat(cleaned.replace(/\./g, '').replace(',', '.')) || 0;
+            }
+            
+            // Fall 2: Nur Punkt vorhanden
+            if (lastDotIndex > -1) {
+                // Prüfe ob es ein Dezimaltrennzeichen ist (max 3 Stellen nach dem letzten Punkt)
+                const afterLastDot = cleaned.substring(lastDotIndex + 1);
+                
+                if (afterLastDot.length <= 3 && /^\d+$/.test(afterLastDot)) {
+                    // Wahrscheinlich Dezimaltrennzeichen: 714.10 oder 1234.567
+                    if (afterLastDot.length <= 2) {
+                        // 2 Stellen = Dezimal: 714.10
+                        return parseFloat(cleaned) || 0;
+                    } else if (afterLastDot.length === 3) {
+                        // 3 Stellen = könnte beides sein, prüfe die Gesamtlänge
+                        if (cleaned.length <= 7) {
+                            // Kurze Zahl = wahrscheinlich Dezimal: 714.100
+                            return parseFloat(cleaned) || 0;
+                        } else {
+                            // Lange Zahl = wahrscheinlich Tausender: 1.234.567
+                            return parseFloat(cleaned.replace(/\./g, '')) || 0;
+                        }
+                    }
+                } else {
+                    // Mehr als 3 Stellen oder ungültig → alle Punkte sind Tausendertrennzeichen
+                    return parseFloat(cleaned.replace(/\./g, '')) || 0;
+                }
+            }
+            
+            // Fall 3: Keine Punkt oder Komma → direkt konvertieren
+            return parseFloat(cleaned) || 0;
         }
 
         // Browser-Einstellungen laden/speichern
@@ -829,11 +874,18 @@
                         // Update Coin-Dropdown mit echten Daten
                         updateCoinDropdown();
                         
-                        // Wähle ersten verfügbaren Coin
-                        const firstCoin = Object.keys(dashboardData.coins)[0];
-                        if (firstCoin) {
-                            currentCoin = firstCoin;
-                            document.getElementById('coinSelect').value = firstCoin;
+                        // Wende gespeicherte Benutzereinstellungen an
+                        const settings = loadUserSettings();
+                        if (dashboardData.coins[settings.selectedCoin]) {
+                            currentCoin = settings.selectedCoin;
+                            document.getElementById('coinSelect').value = settings.selectedCoin;
+                        } else {
+                            // Fallback zum ersten verfügbaren Coin
+                            const firstCoin = Object.keys(dashboardData.coins)[0];
+                            if (firstCoin) {
+                                currentCoin = firstCoin;
+                                document.getElementById('coinSelect').value = firstCoin;
+                            }
                         }
                         
                         updateDashboard();
@@ -1387,12 +1439,32 @@
             const select = document.getElementById('coinSelect');
             select.innerHTML = '';
             
+            const settings = loadUserSettings();
+            let selectedCoinExists = false;
+            
             Object.keys(dashboardData.coins).forEach(coinName => {
                 const option = document.createElement('option');
                 option.value = coinName;
                 option.textContent = coinName;
                 select.appendChild(option);
+                
+                if (coinName === settings.selectedCoin) {
+                    selectedCoinExists = true;
+                }
             });
+            
+            // Setze gespeicherten Coin wenn er existiert
+            if (selectedCoinExists) {
+                select.value = settings.selectedCoin;
+                currentCoin = settings.selectedCoin;
+            } else {
+                // Fallback zum ersten verfügbaren Coin
+                const firstCoin = Object.keys(dashboardData.coins)[0];
+                if (firstCoin) {
+                    select.value = firstCoin;
+                    currentCoin = firstCoin;
+                }
+            }
         }
     </script>
 </body>
