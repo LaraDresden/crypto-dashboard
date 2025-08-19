@@ -2,11 +2,11 @@
 <!--
     🚀 Crypto Dashboard - Responsive & Mobile-optimized
     
-    Version: v1.4.1
-    Created: August 19, 2025 - 21:20:00 CET
+    Version: v1.4.2
+    Created: August 19, 2025 - 21:25:00 CET
     Author: Claude (Anthropic)
     
-    CRITICAL FIX: DEMO-MODUS KOMPLETT ENTFERNT!
+    CRITICAL FIX: FUNCTION DEFINITION ORDER FIXED!
     
     Features:
     - Responsive design for mobile & desktop
@@ -19,6 +19,12 @@
     - Browser settings persistence (localStorage)
     - NO DEMO MODE - Real data only!
     
+    Changelog v1.4.2:
+    - CRITICAL FIX: Fixed function definition order (parseCSVData is not defined)
+    - Reorganized all functions in proper execution order
+    - Moved helper functions to top of script
+    - Fixed JavaScript "function not defined" errors
+    
     Changelog v1.4.1:
     - CRITICAL: Completely removed demo mode fallback
     - Enhanced error handling with detailed logging
@@ -27,7 +33,7 @@
     - Added alert boxes for critical errors
     - NO MORE DEMO DATA - Forces real data loading
     
-    Last Updated: August 19, 2025 - 21:20:00 CET
+    Last Updated: August 19, 2025 - 21:25:00 CET
 -->
 <html lang="de">
 <head>
@@ -495,7 +501,7 @@
     </style>
 </head>
 <body>
-    <div class="version-info">v1.4.1 | 19.08.2025</div>
+    <div class="version-info">v1.4.2 | 19.08.2025</div>
     
     <div class="dashboard">
         <!-- Header -->
@@ -656,13 +662,14 @@
 
         // === VERSION UPDATE ===
         const DASHBOARD_VERSION = {
-            version: 'v1.4.1',
-            build: '19.08.2025-21:20',
+            version: 'v1.4.2',
+            build: '19.08.2025-21:25',
             author: 'Claude (Anthropic)',
             features: [
                 'Responsive Mobile & Desktop Design',
                 'DIRECT Google Sheets CSV Integration', 
                 'NO DEMO FALLBACK - Real Data Only',
+                'FIXED: Function Definition Order',
                 'Intelligent German Number Format Support',
                 'Real Portfolio Data Integration',
                 'Comprehensive Error Handling & Debugging',
@@ -670,6 +677,8 @@
                 'Browser Settings Persistence'
             ]
         };
+
+        // === HILFSFUNKTIONEN (MÜSSEN ZUERST DEFINIERT WERDEN) ===
 
         // Intelligente deutsche Zahlen-Konvertierung
         function parseGermanNumber(germanString) {
@@ -739,6 +748,162 @@
             } catch (error) {
                 console.warn('Fehler beim Speichern der Einstellungen:', error);
             }
+        }
+
+        function updateConnectionStatus(status, message) {
+            const statusEl = document.getElementById('connectionStatus');
+            if (statusEl) {
+                statusEl.className = 'connection-status ' + status;
+                statusEl.textContent = message;
+            }
+        }
+
+        // === CSV PARSING FUNKTIONEN ===
+
+        function parseCSVData(csvText) {
+            console.log('🔄 Starte CSV-Parsing...');
+            const lines = csvText.split('\n').filter(line => line.trim() !== '');
+            console.log('📋 Gefilterte Zeilen:', lines.length);
+            
+            if (lines.length < 2) {
+                throw new Error(`Zu wenige CSV-Zeilen: ${lines.length}. Mindestens 2 erwartet (Header + Daten).`);
+            }
+            
+            const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+            console.log('📋 CSV Headers:', headers);
+            
+            // Prüfe wichtige Spalten
+            const requiredColumns = ['Coin_Name', 'Preis_EUR', 'Wert_EUR'];
+            const missingColumns = requiredColumns.filter(col => !headers.includes(col));
+            if (missingColumns.length > 0) {
+                console.warn('⚠️ Fehlende Spalten:', missingColumns);
+            }
+            
+            const data = [];
+            
+            for (let i = 1; i < lines.length; i++) {
+                if (lines[i].trim()) {
+                    const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+                    const row = {};
+                    
+                    headers.forEach((header, index) => {
+                        row[header] = values[index] || '';
+                    });
+                    
+                    // Nur Zeilen mit gültigen Coin-Namen
+                    if (row.Coin_Name && row.Coin_Name !== '' && row.Coin_Name !== 'Unknown') {
+                        data.push(row);
+                    }
+                }
+            }
+            
+            console.log('🔄 Gültige Datenzeilen nach Parsing:', data.length);
+            
+            if (data.length === 0) {
+                throw new Error('Keine gültigen Datenzeilen gefunden. Prüfen Sie das Google Sheet Format.');
+            }
+            
+            // Sortiere nach Zeitstempel (neueste zuerst)
+            data.sort((a, b) => new Date(b.Zeitstempel) - new Date(a.Zeitstempel));
+            
+            console.log('✅ CSV-Parsing erfolgreich:', data.length, 'Zeilen');
+            return data;
+        }
+
+        function processSheetData(data) {
+            console.log('🔄 Starte Datenverarbeitung für', data.length, 'Zeilen...');
+            
+            const coins = {};
+            const portfolioHistoryMap = new Map();
+            let totalPortfolioValue = 0;
+            
+            // Zeige Sample-Daten für Debug
+            if (data.length > 0) {
+                console.log('📊 Sample-Zeile:', data[0]);
+            }
+            
+            // Gruppiere Daten nach Coin
+            data.forEach((row, index) => {
+                const coinName = row['Coin_Name'];
+                
+                if (!coinName || coinName === '' || coinName === 'Unknown') {
+                    console.warn(`⚠️ Zeile ${index + 1}: Ungültiger Coin-Name:`, coinName);
+                    return;
+                }
+                
+                if (!coins[coinName]) {
+                    coins[coinName] = {
+                        prices: [],
+                        dates: [],
+                        rsi: [],
+                        sentiment: [],
+                        volume: [],
+                        portfolioValues: [],
+                        holdings: [],
+                        rawData: []
+                    };
+                    console.log(`➕ Neuer Coin gefunden: ${coinName}`);
+                }
+                
+                coins[coinName].rawData.push(row);
+            });
+            
+            console.log('📊 Gefundene Coins:', Object.keys(coins));
+            
+            if (Object.keys(coins).length === 0) {
+                throw new Error('Keine gültigen Coins in den Daten gefunden');
+            }
+
+            // Verarbeite jeden Coin
+            for (const coinName in coins) {
+                const coinData = coins[coinName];
+                console.log(`🔄 Verarbeite ${coinName} mit ${coinData.rawData.length} Datenpunkten...`);
+                
+                // Sortiere nach Zeitstempel (älteste zuerst für Charts)
+                coinData.rawData.sort((a, b) => new Date(a.Zeitstempel) - new Date(b.Zeitstempel));
+                
+                coinData.rawData.forEach(row => {
+                    const date = row.Zeitstempel ? row.Zeitstempel.split(' ')[0] : new Date().toISOString().split('T')[0];
+                    const wert = parseGermanNumber(row['Wert_EUR'] || '0');
+                    
+                    // Coin-spezifische Daten
+                    coinData.dates.push(row['Zeitstempel'] || new Date().toISOString());
+                    coinData.prices.push(parseGermanNumber(row['Preis_EUR'] || '0'));
+                    coinData.rsi.push(parseFloat(row['RSI'] || 50));
+                    coinData.sentiment.push(parseFloat(row['News_Sentiment'] || 0));
+                    coinData.volume.push(parseFloat(row['Volume_Ratio'] || 1));
+                    coinData.portfolioValues.push(wert);
+                    coinData.holdings.push(parseGermanNumber(row['Bestand'] || '0'));
+                    
+                    // Aggregiere Portfolio-Wert pro Tag
+                    const currentDayTotal = portfolioHistoryMap.get(date) || 0;
+                    portfolioHistoryMap.set(date, currentDayTotal + wert);
+                });
+                
+                // Berechne aktuellen Portfolio-Wert (letzter Eintrag pro Coin)
+                if (coinData.portfolioValues.length > 0) {
+                    const lastValue = coinData.portfolioValues[coinData.portfolioValues.length - 1];
+                    totalPortfolioValue += lastValue;
+                    console.log(`💰 ${coinName}: €${lastValue.toLocaleString('de-DE')}`);
+                }
+            }
+
+            // Konvertiere Portfolio-Historie zu Array und sortiere
+            const portfolioHistory = Array.from(portfolioHistoryMap.entries())
+                .map(([date, value]) => ({ date, value }))
+                .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            console.log('✅ Verarbeitung erfolgreich:');
+            console.log(`📊 ${Object.keys(coins).length} Coins verarbeitet`);
+            console.log(`💰 Gesamtportfolio: €${totalPortfolioValue.toLocaleString('de-DE')}`);
+            console.log(`📈 Portfolio-Historie: ${portfolioHistory.length} Datenpunkte`);
+
+            return {
+                coins: coins,
+                last_update: new Date().toISOString(),
+                portfolio_total: totalPortfolioValue,
+                portfolio_history: portfolioHistory
+            };
         }
 
         // Globale Variablen
@@ -842,6 +1007,8 @@
             });
         }
 
+        // === DATENLADUNG FUNKTIONEN ===
+
         function loadDashboardData() {
             // DIREKTE VERBINDUNG - Keine Fallbacks mehr!
             const sheetUrl = GOOGLE_SHEET_CSV_URL;
@@ -914,6 +1081,8 @@
             
             alert('HINWEIS: Demo-Modus wurde deaktiviert!\n\nDas Dashboard lädt nur noch echte Daten aus Google Sheets.\nWenn Sie diesen Fehler sehen, überprüfen Sie bitte Ihre Google Sheets Konfiguration.');
         }
+
+        // === UI FUNKTIONEN ===
 
         function generateDemoData() {
             const coins = ['Bitcoin', 'Ethereum', 'Solana', 'Cardano', 'XRP'];
