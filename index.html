@@ -2,43 +2,32 @@
 <!--
     🚀 Crypto Dashboard - Responsive & Mobile-optimized
     
-    Version: v1.4.0
-    Created: August 19, 2025 - 21:05:00 CET
+    Version: v1.4.1
+    Created: August 19, 2025 - 21:20:00 CET
     Author: Claude (Anthropic)
+    
+    CRITICAL FIX: DEMO-MODUS KOMPLETT ENTFERNT!
     
     Features:
     - Responsive design for mobile & desktop
-    - Direct Google Sheets CSV integration (no URL extraction needed)
+    - DIRECT Google Sheets CSV integration (NO FALLBACKS!)
     - Real-time crypto data visualization
     - Technical indicators (RSI, MACD, Moving Averages)
-    - Demo mode with realistic data
     - Intelligent German number format support
     - Real portfolio data integration
-    - Robust CSV parsing with fallback mappings
+    - Comprehensive error handling and debugging
     - Browser settings persistence (localStorage)
-    - Simplified configuration at top of file
+    - NO DEMO MODE - Real data only!
     
-    Changelog v1.4.0:
-    - MAJOR REFACTOR: Direct CSV URL configuration (no extraction needed)
-    - Simplified data loading with better error handling
-    - Improved CSV parsing with robust header and index mapping
-    - Enhanced portfolio calculation with Map-based aggregation
-    - Cleaner separation of concerns (initializeUI vs data processing)
-    - Better debug logging throughout the application
-    - Removed complex URL parsing - just configure GOOGLE_SHEET_CSV_URL
+    Changelog v1.4.1:
+    - CRITICAL: Completely removed demo mode fallback
+    - Enhanced error handling with detailed logging
+    - Added comprehensive CSV validation
+    - Improved debugging with step-by-step logs
+    - Added alert boxes for critical errors
+    - NO MORE DEMO DATA - Forces real data loading
     
-    Changelog v1.3.2:
-    - CRITICAL FIX: Added hardcoded Google Sheets URL fallback
-    - Enhanced debug logging for data loading
-    - Improved error messages for troubleshooting
-    - Auto-loading of user's sheet data on dashboard start
-    
-    Changelog v1.3.1:
-    - BUGFIX: Intelligent number parsing (714.10 vs 1.234.567)
-    - Fixed portfolio value calculation errors
-    - Improved decimal vs thousand separator detection
-    
-    Last Updated: August 19, 2025 - 21:05:00 CET
+    Last Updated: August 19, 2025 - 21:20:00 CET
 -->
 <html lang="de">
 <head>
@@ -506,7 +495,7 @@
     </style>
 </head>
 <body>
-    <div class="version-info">v1.4.0 | 19.08.2025</div>
+    <div class="version-info">v1.4.1 | 19.08.2025</div>
     
     <div class="dashboard">
         <!-- Header -->
@@ -665,21 +654,20 @@
         // WICHTIG: Hier die CSV-Export-URL Ihres Google Sheets eintragen
         const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1-EVE79kI8V9kgeZCYXo63WNKMnuJHYDRs9LmGUFZqgo/export?format=csv&gid=0";
 
-        // Dashboard Version Information
+        // === VERSION UPDATE ===
         const DASHBOARD_VERSION = {
-            version: 'v1.4.0',
-            build: '19.08.2025-21:05',
+            version: 'v1.4.1',
+            build: '19.08.2025-21:20',
             author: 'Claude (Anthropic)',
             features: [
                 'Responsive Mobile & Desktop Design',
-                'Direct Google Sheets CSV Integration', 
+                'DIRECT Google Sheets CSV Integration', 
+                'NO DEMO FALLBACK - Real Data Only',
                 'Intelligent German Number Format Support',
                 'Real Portfolio Data Integration',
-                'Real-time Crypto Data Visualization',
+                'Comprehensive Error Handling & Debugging',
                 'Technical Indicators (RSI, MACD, MA)',
-                'Demo Mode with Realistic Data',
-                'Browser Settings Persistence',
-                'Simplified Configuration'
+                'Browser Settings Persistence'
             ]
         };
 
@@ -855,59 +843,76 @@
         }
 
         function loadDashboardData() {
-            // Direkte Konfiguration - einfach und zuverlässig
+            // DIREKTE VERBINDUNG - Keine Fallbacks mehr!
             const sheetUrl = GOOGLE_SHEET_CSV_URL;
             
-            console.log('🔍 Lade Daten von konfigurierter URL:', sheetUrl);
+            console.log('🔍 DIREKTE VERBINDUNG - Konfigurierte URL:', sheetUrl);
             
-            if (sheetUrl && sheetUrl !== "IHR_GOOGLE_SHEET_CSV_EXPORT_LINK" && sheetUrl.includes('google.com')) {
-                loadGoogleSheetsData(sheetUrl);
-            } else {
-                console.warn('⚠️ Keine gültige Sheet-URL konfiguriert, verwende Demo-Daten');
-                updateConnectionStatus('demo', '🎮 Demo-Modus (URL nicht konfiguriert)');
-                loadDemoData();
+            // Prüfe ob URL konfiguriert ist
+            if (!sheetUrl || sheetUrl === "IHR_GOOGLE_SHEET_CSV_EXPORT_LINK") {
+                console.error('❌ FEHLER: Google Sheets URL nicht konfiguriert!');
+                updateConnectionStatus('error', '❌ URL nicht konfiguriert');
+                return;
             }
-        }
-
-        function loadGoogleSheetsData(url) {
-            updateConnectionStatus('connecting', '🔄 Verbinde mit Google Sheets...');
-            console.log('📊 Lade Daten direkt von:', url);
             
-            fetch(url)
+            // DIREKTE VERBINDUNG - KEIN FALLBACK AUF DEMO!
+            updateConnectionStatus('connecting', '🔄 Verbinde mit Google Sheets...');
+            console.log('📡 Starte direkten Fetch...');
+            
+            fetch(sheetUrl)
                 .then(response => {
-                    console.log('📡 Response Status:', response.status);
+                    console.log('📡 Response erhalten:', response.status, response.statusText);
                     if (!response.ok) {
-                        throw new Error(`Sheet nicht erreichbar: ${response.status}. Überprüfen Sie die Freigabe-Einstellungen.`);
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                     }
                     return response.text();
                 })
                 .then(csvData => {
-                    console.log('📋 CSV-Daten erhalten:', csvData.substring(0, 300) + '...');
+                    console.log('📋 CSV-Daten empfangen:', csvData.length, 'Zeichen');
+                    console.log('📋 Erste 500 Zeichen:', csvData.substring(0, 500));
+                    
+                    if (!csvData || csvData.trim() === '') {
+                        throw new Error('Leere CSV-Daten erhalten');
+                    }
+                    
                     const data = parseCSVData(csvData);
                     console.log('🔄 Parsed Data:', data.length, 'Zeilen');
                     
+                    if (data.length === 0) {
+                        throw new Error('Keine gültigen Daten nach CSV-Parsing');
+                    }
+                    
                     dashboardData = processSheetData(data);
-                    console.log('📊 Dashboard Data:', dashboardData);
+                    console.log('📊 Dashboard Data verarbeitet:', Object.keys(dashboardData.coins).length, 'Coins');
+                    console.log('💰 Portfolio Total:', dashboardData.portfolio_total);
+                    
+                    if (Object.keys(dashboardData.coins).length === 0) {
+                        throw new Error('Keine Coins nach Datenverarbeitung gefunden');
+                    }
                     
                     updateConnectionStatus('connected', '✅ Google Sheets verbunden');
                     initializeUI();
                     updateDashboard();
+                    
+                    console.log('✅ ERFOLG: Echte Daten geladen!');
+                    
                 })
                 .catch(error => {
-                    console.error('❌ Google Sheets Fehler:', error);
+                    console.error('❌ KRITISCHER FEHLER beim Laden der Google Sheets:', error);
                     updateConnectionStatus('error', `❌ Fehler: ${error.message}`);
-                    console.warn('🎮 Fallback zu Demo-Daten');
-                    loadDemoData();
+                    
+                    // ZEIGE DEN FEHLER PROMINENT AN
+                    alert(`FEHLER beim Laden der Google Sheets Daten:\n\n${error.message}\n\nÜberprüfen Sie:\n1. Ist das Google Sheet öffentlich zugänglich?\n2. Ist die URL korrekt?\n3. Öffnen Sie die Entwicklerkonsole (F12) für Details.`);
+                    
+                    // KEIN FALLBACK AUF DEMO - BENUTZER SOLL PROBLEM SEHEN
                 });
         }
 
         function loadDemoData() {
-            updateConnectionStatus('demo', '🎮 Demo-Modus');
+            console.log('🎮 Demo-Daten werden NICHT mehr verwendet!');
+            updateConnectionStatus('error', '❌ Echte Daten erforderlich');
             
-            // Generiere realistische Demo-Daten
-            dashboardData = generateDemoData();
-            initializeUI();
-            updateDashboard();
+            alert('HINWEIS: Demo-Modus wurde deaktiviert!\n\nDas Dashboard lädt nur noch echte Daten aus Google Sheets.\nWenn Sie diesen Fehler sehen, überprüfen Sie bitte Ihre Google Sheets Konfiguration.');
         }
 
         function generateDemoData() {
