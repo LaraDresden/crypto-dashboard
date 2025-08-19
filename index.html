@@ -2,22 +2,30 @@
 <!--
     🚀 Crypto Dashboard - Responsive & Mobile-optimized
     
-    Version: v1.4.2
-    Created: August 19, 2025 - 21:25:00 CET
+    Version: v1.4.3
+    Created: August 19, 2025 - 21:35:00 CET
     Author: Claude (Anthropic)
     
-    CRITICAL FIX: FUNCTION DEFINITION ORDER FIXED!
+    CRITICAL FIX: NUMBER PARSING & PORTFOLIO CALCULATION!
     
     Features:
     - Responsive design for mobile & desktop
     - DIRECT Google Sheets CSV integration (NO FALLBACKS!)
     - Real-time crypto data visualization
     - Technical indicators (RSI, MACD, Moving Averages)
-    - Intelligent German number format support
-    - Real portfolio data integration
+    - FIXED German number format parsing
+    - FIXED Portfolio calculation (uses only latest values per coin)
     - Comprehensive error handling and debugging
     - Browser settings persistence (localStorage)
     - NO DEMO MODE - Real data only!
+    
+    Changelog v1.4.3:
+    - CRITICAL FIX: Simplified parseGermanNumber function
+    - CRITICAL FIX: Portfolio calculation now uses only latest values per coin
+    - Added detailed debugging logs for number parsing
+    - Fixed issue where values like "97243.0000" became "97243000000"
+    - Added sanity checks for unrealistic portfolio values
+    - Improved data processing logic to avoid double-counting
     
     Changelog v1.4.2:
     - CRITICAL FIX: Fixed function definition order (parseCSVData is not defined)
@@ -25,15 +33,7 @@
     - Moved helper functions to top of script
     - Fixed JavaScript "function not defined" errors
     
-    Changelog v1.4.1:
-    - CRITICAL: Completely removed demo mode fallback
-    - Enhanced error handling with detailed logging
-    - Added comprehensive CSV validation
-    - Improved debugging with step-by-step logs
-    - Added alert boxes for critical errors
-    - NO MORE DEMO DATA - Forces real data loading
-    
-    Last Updated: August 19, 2025 - 21:25:00 CET
+    Last Updated: August 19, 2025 - 21:35:00 CET
 -->
 <html lang="de">
 <head>
@@ -501,7 +501,7 @@
     </style>
 </head>
 <body>
-    <div class="version-info">v1.4.2 | 19.08.2025</div>
+    <div class="version-info">v1.4.3 | 19.08.2025</div>
     
     <div class="dashboard">
         <!-- Header -->
@@ -662,15 +662,15 @@
 
         // === VERSION UPDATE ===
         const DASHBOARD_VERSION = {
-            version: 'v1.4.2',
-            build: '19.08.2025-21:25',
+            version: 'v1.4.3',
+            build: '19.08.2025-21:35',
             author: 'Claude (Anthropic)',
             features: [
                 'Responsive Mobile & Desktop Design',
                 'DIRECT Google Sheets CSV Integration', 
                 'NO DEMO FALLBACK - Real Data Only',
-                'FIXED: Function Definition Order',
-                'Intelligent German Number Format Support',
+                'FIXED: Number Parsing Logic (German Format)',
+                'FIXED: Portfolio Calculation (Latest Values Only)',
                 'Real Portfolio Data Integration',
                 'Comprehensive Error Handling & Debugging',
                 'Technical Indicators (RSI, MACD, MA)',
@@ -680,51 +680,58 @@
 
         // === HILFSFUNKTIONEN (MÜSSEN ZUERST DEFINIERT WERDEN) ===
 
-        // Intelligente deutsche Zahlen-Konvertierung
+        // === KORRIGIERTE DEUTSCHE ZAHLEN-KONVERTIERUNG ===
         function parseGermanNumber(germanString) {
             if (!germanString || typeof germanString !== 'string') return 0;
             
-            // Entferne Leerzeichen
             const cleaned = germanString.trim();
+            console.log(`🔢 Parsing: "${cleaned}"`);
             
-            // Prüfe das Format der Zahl
-            const lastDotIndex = cleaned.lastIndexOf('.');
-            const lastCommaIndex = cleaned.lastIndexOf(',');
-            
-            // Fall 1: Enthält Komma → Komma ist Dezimaltrennzeichen
-            if (lastCommaIndex > -1) {
-                // Format: 1.234.567,89 oder 1234,89
-                return parseFloat(cleaned.replace(/\./g, '').replace(',', '.')) || 0;
+            // Spezialfall: Sehr kleine Zahlen oder Nullen
+            if (cleaned === '0' || cleaned === '0.0' || cleaned === '0,0' || cleaned === '0.000000000') {
+                console.log(`   → Erkannt als Null: 0`);
+                return 0;
             }
             
-            // Fall 2: Nur Punkt vorhanden
-            if (lastDotIndex > -1) {
-                // Prüfe ob es ein Dezimaltrennzeichen ist (max 3 Stellen nach dem letzten Punkt)
-                const afterLastDot = cleaned.substring(lastDotIndex + 1);
+            // Einfache Regel: Wenn es ein Komma gibt, ist das IMMER Dezimaltrennzeichen
+            if (cleaned.includes(',')) {
+                // Deutsche Format: 1.234.567,89 → entferne Punkte, ersetze Komma mit Punkt
+                const result = parseFloat(cleaned.replace(/\./g, '').replace(',', '.')) || 0;
+                console.log(`   → Deutsches Format mit Komma: ${result}`);
+                return result;
+            }
+            
+            // Nur Punkte vorhanden - das ist das kritische Problem!
+            // Regel: Bei Google Sheets Export sind das meist Dezimalzahlen!
+            const parts = cleaned.split('.');
+            
+            if (parts.length === 2) {
+                // Ein Punkt → wahrscheinlich Dezimalzahl
+                const beforeDot = parts[0];
+                const afterDot = parts[1];
                 
-                if (afterLastDot.length <= 3 && /^\d+$/.test(afterLastDot)) {
-                    // Wahrscheinlich Dezimaltrennzeichen: 714.10 oder 1234.567
-                    if (afterLastDot.length <= 2) {
-                        // 2 Stellen = Dezimal: 714.10
-                        return parseFloat(cleaned) || 0;
-                    } else if (afterLastDot.length === 3) {
-                        // 3 Stellen = könnte beides sein, prüfe die Gesamtlänge
-                        if (cleaned.length <= 7) {
-                            // Kurze Zahl = wahrscheinlich Dezimal: 714.100
-                            return parseFloat(cleaned) || 0;
-                        } else {
-                            // Lange Zahl = wahrscheinlich Tausender: 1.234.567
-                            return parseFloat(cleaned.replace(/\./g, '')) || 0;
-                        }
-                    }
-                } else {
-                    // Mehr als 3 Stellen oder ungültig → alle Punkte sind Tausendertrennzeichen
-                    return parseFloat(cleaned.replace(/\./g, '')) || 0;
+                // Wenn nach dem Punkt 4+ Nullen stehen, ist es eine Dezimalzahl
+                if (/^0+$/.test(afterDot)) {
+                    const result = parseFloat(beforeDot);
+                    console.log(`   → Dezimalzahl mit Nullen: ${result}`);
+                    return result;
                 }
+                
+                // Normale Dezimalzahl
+                const result = parseFloat(cleaned);
+                console.log(`   → Normale Dezimalzahl: ${result}`);
+                return result;
+            } else if (parts.length > 2) {
+                // Mehrere Punkte → deutsche Tausendertrennzeichen: 1.234.567
+                const result = parseFloat(cleaned.replace(/\./g, ''));
+                console.log(`   → Tausendertrennzeichen: ${result}`);
+                return result;
             }
             
-            // Fall 3: Keine Punkt oder Komma → direkt konvertieren
-            return parseFloat(cleaned) || 0;
+            // Fallback: normale Konvertierung
+            const result = parseFloat(cleaned) || 0;
+            console.log(`   → Fallback: ${result}`);
+            return result;
         }
 
         // Browser-Einstellungen laden/speichern
@@ -815,14 +822,18 @@
             
             const coins = {};
             const portfolioHistoryMap = new Map();
-            let totalPortfolioValue = 0;
             
             // Zeige Sample-Daten für Debug
             if (data.length > 0) {
                 console.log('📊 Sample-Zeile:', data[0]);
+                console.log('📊 Sample Preis_EUR:', data[0]['Preis_EUR']);
+                console.log('📊 Sample Wert_EUR:', data[0]['Wert_EUR']);
             }
             
-            // Gruppiere Daten nach Coin
+            // Sammle nur die NEUESTE Zeile pro Coin für Portfolio-Berechnung
+            const latestDataPerCoin = new Map();
+            
+            // Gruppiere Daten nach Coin und finde neuesten Eintrag
             data.forEach((row, index) => {
                 const coinName = row['Coin_Name'];
                 
@@ -831,6 +842,7 @@
                     return;
                 }
                 
+                // Sammle alle Daten für Charts
                 if (!coins[coinName]) {
                     coins[coinName] = {
                         prices: [],
@@ -846,15 +858,37 @@
                 }
                 
                 coins[coinName].rawData.push(row);
+                
+                // Finde neuesten Eintrag pro Coin für Portfolio
+                const zeitstempel = new Date(row['Zeitstempel'] || new Date());
+                if (!latestDataPerCoin.has(coinName) || 
+                    zeitstempel > new Date(latestDataPerCoin.get(coinName)['Zeitstempel'] || '2000-01-01')) {
+                    latestDataPerCoin.set(coinName, row);
+                }
             });
             
             console.log('📊 Gefundene Coins:', Object.keys(coins));
+            console.log('💰 Neueste Einträge für Portfolio-Berechnung:');
+            
+            // Berechne Portfolio-Total nur aus NEUESTEN Werten
+            let totalPortfolioValue = 0;
+            latestDataPerCoin.forEach((row, coinName) => {
+                const wertEur = parseGermanNumber(row['Wert_EUR'] || '0');
+                const preisEur = parseGermanNumber(row['Preis_EUR'] || '0');
+                
+                console.log(`💰 ${coinName}:`);
+                console.log(`   Zeitstempel: ${row['Zeitstempel']}`);
+                console.log(`   Preis_EUR Raw: "${row['Preis_EUR']}" → Parsed: €${preisEur.toLocaleString('de-DE')}`);
+                console.log(`   Wert_EUR Raw: "${row['Wert_EUR']}" → Parsed: €${wertEur.toLocaleString('de-DE')}`);
+                
+                totalPortfolioValue += wertEur;
+            });
             
             if (Object.keys(coins).length === 0) {
                 throw new Error('Keine gültigen Coins in den Daten gefunden');
             }
 
-            // Verarbeite jeden Coin
+            // Verarbeite jeden Coin für Charts
             for (const coinName in coins) {
                 const coinData = coins[coinName];
                 console.log(`🔄 Verarbeite ${coinName} mit ${coinData.rawData.length} Datenpunkten...`);
@@ -875,17 +909,10 @@
                     coinData.portfolioValues.push(wert);
                     coinData.holdings.push(parseGermanNumber(row['Bestand'] || '0'));
                     
-                    // Aggregiere Portfolio-Wert pro Tag
+                    // Aggregiere Portfolio-Wert pro Tag (für Portfolio-Chart)
                     const currentDayTotal = portfolioHistoryMap.get(date) || 0;
                     portfolioHistoryMap.set(date, currentDayTotal + wert);
                 });
-                
-                // Berechne aktuellen Portfolio-Wert (letzter Eintrag pro Coin)
-                if (coinData.portfolioValues.length > 0) {
-                    const lastValue = coinData.portfolioValues[coinData.portfolioValues.length - 1];
-                    totalPortfolioValue += lastValue;
-                    console.log(`💰 ${coinName}: €${lastValue.toLocaleString('de-DE')}`);
-                }
             }
 
             // Konvertiere Portfolio-Historie zu Array und sortiere
@@ -895,8 +922,15 @@
 
             console.log('✅ Verarbeitung erfolgreich:');
             console.log(`📊 ${Object.keys(coins).length} Coins verarbeitet`);
-            console.log(`💰 Gesamtportfolio: €${totalPortfolioValue.toLocaleString('de-DE')}`);
+            console.log(`💰 Gesamtportfolio (nur neueste Werte): €${totalPortfolioValue.toLocaleString('de-DE')}`);
             console.log(`📈 Portfolio-Historie: ${portfolioHistory.length} Datenpunkte`);
+
+            // SANITY CHECK: Portfolio sollte realistisch sein
+            if (totalPortfolioValue > 1000000) { // Mehr als 1 Million EUR
+                console.warn('⚠️ WARNUNG: Portfolio-Wert scheint unrealistisch hoch zu sein!');
+                console.warn(`   Berechnet: €${totalPortfolioValue.toLocaleString('de-DE')}`);
+                console.warn('   Prüfen Sie die Wert_EUR Spalte in Ihren Google Sheets');
+            }
 
             return {
                 coins: coins,
