@@ -154,9 +154,10 @@
 
         function processData(parsedData) {
             const coins = {};
+            // 1. Alle Daten nach Coin gruppieren
             parsedData.forEach(row => {
                 const coinName = row["Coin"];
-                if (!coinName) return;
+                if (!coinName || row.Status !== "Erfolgreich") return; // Nur erfolgreiche Einträge verwenden
                 if (!coins[coinName]) coins[coinName] = { data: [] };
                 coins[coinName].data.push(row);
             });
@@ -164,22 +165,34 @@
             let totalPortfolioValue = 0;
             const portfolioHistoryMap = new Map();
 
+            // 2. Für jeden Coin: Den neuesten Eintrag finden und historische Daten für Charts vorbereiten
             for (const coinName in coins) {
+                // Sortiere alle Einträge für diesen Coin nach Datum, neueste zuerst
                 coins[coinName].data.sort((a, b) => new Date(b.Datum) - new Date(a.Datum));
-                const latestEntry = coins[coinName].data[0];
-                if (latestEntry) { totalPortfolioValue += parseGermanNumber(latestEntry.Wert_EUR); }
-                coins[coinName].data.sort((a, b) => new Date(a.Datum) - new Date(b.Datum));
                 
-                coins[coinName].data.forEach(row => {
-                    const dateKey = row.Datum.split(' ')[0];
-                    const wert = parseGermanNumber(row.Wert_EUR);
-                    portfolioHistoryMap.set(dateKey, (portfolioHistoryMap.get(dateKey) || 0) + wert);
-                });
-            }
+                // Der neueste Eintrag ist der erste in der sortierten Liste
+                const latestEntry = coins[coinName].data[0];
+                if (latestEntry) {
+                    totalPortfolioValue += parseGermanNumber(latestEntry.Wert_EUR);
+                }
 
-            const portfolioHistory = Array.from(portfolioHistoryMap.entries())
-                .map(([date, value]) => ({ date, value }))
-                .sort((a, b) => new Date(a.date) - new Date(b.date));
+                // Für die Charts, sortiere wieder chronologisch (älteste zuerst)
+                coins[coinName].data.sort((a, b) => new Date(a.Datum) - new Date(b.Datum));
+            }
+            
+            // 3. Portfolio-Historie für den Chart korrekt berechnen (alle Werte pro Tag summieren)
+            const dailyTotals = {};
+            parsedData.forEach(row => {
+                if(row.Status !== "Erfolgreich") return;
+                const dateKey = row.Datum.split(' ')[0];
+                if(!dailyTotals[dateKey]) dailyTotals[dateKey] = {};
+                dailyTotals[dateKey][row.Coin] = parseGermanNumber(row.Wert_EUR);
+            });
+            
+            const portfolioHistory = Object.keys(dailyTotals).map(date => {
+                const totalValue = Object.values(dailyTotals[date]).reduce((sum, value) => sum + value, 0);
+                return { date, value: totalValue };
+            }).sort((a,b) => new Date(a.date) - new Date(b.date));
                 
             console.log(`✅ Verarbeitung abgeschlossen. Finaler Portfolio-Wert: €${totalPortfolioValue.toFixed(2)}`);
 
